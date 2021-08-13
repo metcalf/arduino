@@ -12,8 +12,9 @@ OpenLog myLog;
 
 int BUTTON_PIN = 12;
 unsigned long CALIBRATE_HOLD_MILLIS = 5000UL;
-unsigned long CALIBRATE_WAIT_MILLIS = 60UL * 4UL * 1000UL;
+unsigned long CALIBRATE_WAIT_MILLIS = (60UL * 4UL + 30UL) * 1000UL; // At least 3 minutes
 int CALIBRATE_PPM = 415;
+float TEMP_OFFSET = 2.2;
 
 long buttonPressStart = -1;
 
@@ -39,17 +40,30 @@ void setup() {
     }
 
     //scdSensor.enableDebugging();
-    if (scdSensor.begin(true, false, false) == false) {
+    if (scdSensor.begin(false, false, false) == false) {
         Serial.println(F("SCD40 not detected. Check connections. Freezing..."));
         display.print("ERRP");
         while (1);
     }
+    if (scdSensor.setTemperatureOffset(TEMP_OFFSET) == false) {
+      Serial.println(F("SCD40 temp offset failed. Freezing..."));
+      display.print("ERRP");
+      while (1);
+    }
+    Serial.print(F("Temperature offset is currently: "));
+    Serial.println(scdSensor.getTemperatureOffset(), 2); // Print the temperature offset with two decimal places
 
-//    if (myLog.begin() == false) {
-//      Serial.println(F("OpenLog init error. Freezing..."));
-//      display.print("ERRL");
-//      while(1);
-//    }
+    if(scdSensor.startLowPowerPeriodicMeasurement() == false) {
+      Serial.println(F("SCD40 start measurement failed . Freezing..."));
+      display.print("ERRP");
+      while (1);
+    }
+
+    if (myLog.begin() == false) {
+      Serial.println(F("OpenLog init error. Freezing..."));
+      display.print("ERRL");
+      while(1);
+    }
 
     Serial.println(F("CO2\tT\tRH\tVOC\tmillis"));
 
@@ -73,11 +87,11 @@ void loop() {
     String msg = String(co2) + "\t" + String(temp, 1) + "\t" + String(rh, 1) + "\t" + String(vocIndex) + "\t" + String(millis());
 
     Serial.println(msg);
-//    myLog.println(msg);
+    myLog.println(msg);
   }
 
   checkCal();
-  delay(500);
+  delay(100);
 }
 
 void checkCal() {
@@ -87,6 +101,8 @@ void checkCal() {
   }
   if (buttonPressStart == -1) {
     buttonPressStart = millis();
+    myLog.syncFile();
+    display.print("SYNC");
     return;
   }
 
@@ -114,7 +130,7 @@ void checkCal() {
 
   Serial.println("Calibrated, correction: " + String(correction, 2));
 
-  if(scdSensor.startPeriodicMeasurement() == false) {
+  if(scdSensor.startLowPowerPeriodicMeasurement() == false) {
     display.print("ERRC");
     while(1);
   }
